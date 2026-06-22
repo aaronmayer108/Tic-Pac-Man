@@ -1,0 +1,221 @@
+:root {
+  --p1: #ffe600;
+  --p2: #ff3b30;
+  --maze: #2121de;
+  --bg: #000;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #05050f;
+  color: #fff;
+  font-family: "Press Start 2P", "Courier New", monospace;
+}
+
+.wrap {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px 12px;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(22px, 5vw, 40px);
+  letter-spacing: 4px;
+  font-weight: 800;
+  text-shadow: 0 0 18px rgba(33, 33, 222, 0.8);
+}
+h1 .p1 { color: var(--p1); }
+h1 .p2 { color: var(--p2); }
+
+.hud {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+  width: 100%;
+  max-width: 560px;
+}
+
+.player-card {
+  flex: 1 1 220px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 2px solid transparent;
+}
+.p1-card { border-color: rgba(255, 230, 0, 0.5); }
+.p2-card { border-color: rgba(255, 59, 48, 0.5); }
+
+.dot-badge {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.p1-badge { background: var(--p1); box-shadow: 0 0 12px var(--p1); }
+.p2-badge { background: var(--p2); box-shadow: 0 0 12px var(--p2); }
+
+.player-card .name { font-size: 11px; margin-bottom: 6px; }
+.player-card .keys { font-size: 9px; color: #aab; }
+
+kbd {
+  display: inline-block;
+  background: #1b1b2f;
+  border: 1px solid #3a3a5a;
+  border-radius: 4px;
+  padding: 2px 5px;
+  margin: 0 1px;
+  font-size: 9px;
+}
+
+.score {
+  margin-left: auto;
+  font-size: 24px;
+  min-width: 28px;
+  text-align: right;
+}
+.p1-card .score { color: var(--p1); }
+.p2-card .score { color: var(--p2); }
+
+/* ------------------------------- Stage ---------------------------------- */
+.stage {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+}
+
+canvas {
+  background: var(--bg);
+  border-radius: 10px;
+  box-shadow: 0 0 40px rgba(33, 33, 222, 0.35);
+  max-width: 95vw;
+  height: auto;
+  touch-action: none;
+}
+
+/* ---------------------------- Setup overlay ----------------------------- */
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 24px;
+  background: rgba(5, 5, 18, 0.93);
+  border-radius: 10px;
+  border: 2px solid rgba(33, 33, 222, 0.6);
+  line-height: 1.4;
+}
+.overlay.hidden { display: none; }
+
+.overlay h2 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  letter-spacing: 3px;
+  color: #fff;
+  text-shadow: 0 0 14px rgba(33, 33, 222, 0.9);
+}
+
+.opt-group {
+  width: min(360px, 80%);
+  text-align: center;
+}
+.opt-group.dim { opacity: 0.45; }
+
+.opt-label {
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: #aab;
+  margin-bottom: 10px;
+}
+
+.opt-hint {
+  font-size: 8.5px;
+  color: #778;
+  margin: 8px 0 0;
+  line-height: 1.6;
+}
+
+/* Segmented control */
+.seg {
+  display: inline-flex;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 2px solid #2a2a45;
+}
+.seg button {
+  font-family: inherit;
+  font-size: 11px;
+  padding: 10px 14px;
+  background: #14142a;
+  color: #99a;
+  border: none;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.seg button + button { border-left: 2px solid #2a2a45; }
+.seg button:hover { color: #fff; }
+.seg button.active {
+  background: var(--maze);
+  color: #fff;
+}
+
+/* Toggle button */
+.toggle {
+  font-family: inherit;
+  font-size: 12px;
+  padding: 10px 22px;
+  min-width: 110px;
+  border-radius: 10px;
+  border: 2px solid #2a2a45;
+  background: #14142a;
+  color: #99a;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.toggle:hover:not(:disabled) { color: #fff; }
+.toggle.on {
+  background: #1f7a33;
+  border-color: #2fbf52;
+  color: #fff;
+}
+.toggle:disabled { cursor: not-allowed; }
+
+.start-btn {
+  font-family: inherit;
+  font-size: 16px;
+  letter-spacing: 2px;
+  padding: 14px 34px;
+  margin-top: 6px;
+  border-radius: 12px;
+  border: none;
+  background: var(--p1);
+  color: #1a1a00;
+  cursor: pointer;
+  font-weight: bold;
+  box-shadow: 0 0 22px rgba(255, 230, 0, 0.5);
+  transition: transform 0.1s;
+}
+.start-btn:hover { transform: scale(1.05); }
+
+.tip {
+  font-size: 10px;
+  color: #99a;
+  text-align: center;
+  max-width: 520px;
+  line-height: 1.6;
+}
+.tip strong { color: #fff; }

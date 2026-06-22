@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tic-Pac-Man</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <h1>TIC-<span class="p1">PAC</span>-<span class="p2">MAN</span></h1>
+
+    <div class="hud">
+      <div class="player-card p1-card">
+        <span class="dot-badge p1-badge"></span>
+        <div>
+          <div class="name">Player 1 &nbsp;·&nbsp; <strong>X</strong></div>
+          <div class="keys">Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div>
+        </div>
+        <div class="score" id="score1">0</div>
+      </div>
+
+      <div class="player-card p2-card">
+        <span class="dot-badge p2-badge"></span>
+        <div>
+          <div class="name">Player 2 &nbsp;·&nbsp; <strong>O</strong></div>
+          <div class="keys">Move with <kbd>&uarr;</kbd><kbd>&larr;</kbd><kbd>&darr;</kbd><kbd>&rarr;</kbd></div>
+        </div>
+        <div class="score" id="score2">0</div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <canvas id="game"></canvas>
+
+      <!-- Waiting room / setup screen -->
+      <div id="start-screen" class="overlay">
+        <h2>GAME SETUP</h2>
+
+        <div class="opt-group">
+          <div class="opt-label">Game Mode</div>
+          <div class="seg" id="mode-seg">
+            <button type="button" data-mode="finish" class="active">First to Finish</button>
+            <button type="button" data-mode="percent">Percent (75%)</button>
+          </div>
+          <p class="opt-hint" id="mode-hint"></p>
+        </div>
+
+        <div class="opt-group">
+          <div class="opt-label">Reclaimable Squares</div>
+          <button type="button" id="reclaim-toggle" class="toggle" aria-pressed="false">OFF</button>
+          <p class="opt-hint">First-to-Finish only: dots respawn after a square is claimed so it can be stolen back. (Percent mode is always reclaimable.)</p>
+        </div>
+
+        <div class="opt-group">
+          <div class="opt-label">Ghosts</div>
+          <button type="button" id="ghosts-toggle" class="toggle" aria-pressed="false">OFF</button>
+          <p class="opt-hint">4 ghosts emerge from the center cage and chase you when near. Eat a Big Pellet (one per square) to turn them blue and edible. Get caught and you respawn.</p>
+        </div>
+
+        <button type="button" id="start-btn" class="start-btn">START GAME</button>
+      </div>
+    </div>
+
+    <p class="tip">Clear every dot in a square to claim it. Get <strong>three in a row</strong> to win!<br>Eat more dots than your rival to grow <strong>faster &amp; bigger</strong>. Side tunnels wrap around. Press <kbd>M</kbd> to mute.</p>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# Logs / deps (none currently, but safe defaults)
+node_modules/
+*.log
