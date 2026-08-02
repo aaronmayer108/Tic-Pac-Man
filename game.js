@@ -92,7 +92,12 @@ function hexToRgba(hex, a) {
 // players: 2 (P1 vs P2) or 3 (adds P3, green triangle, IJKL keys).
 // strength: eat-more-dots -> faster & bigger (optional).
 // stall: caught by a ghost freezes you for 2s instead of respawning.
-const config = { mode: "finish", reclaim: false, ghosts: false, players: 3, strength: true, stall: false };
+// collide: players block each other instead of passing through.
+const config = { mode: "finish", reclaim: false, ghosts: false, players: 3, strength: true, stall: false, collide: false };
+
+// Centre-to-centre gap players stop at when collision is on (< 1 tile so
+// it never falsely blocks parallel corridors separated by a wall).
+const PLAYER_COLL_DIST = TILE * 0.92;
 
 const dots = [];        // dots[r][c] = dot still present
 const dotOwner = [];    // 0/1/2 (percent mode colour)
@@ -319,6 +324,21 @@ function applyStrength(p) {
   p.r = TILE * 0.42 * (1 + boost * 0.35);
 }
 
+// True if p's new position moves it into (or presses it against) another
+// player. Motion that increases the gap is always allowed, so bumped players
+// can still back away and go around.
+function hitsAnotherPlayer(p, oldx, oldy) {
+  for (const q of players) {
+    if (q === p) continue;
+    const dNew = Math.hypot(p.x - q.x, p.y - q.y);
+    if (dNew < PLAYER_COLL_DIST) {
+      const dOld = Math.hypot(oldx - q.x, oldy - q.y);
+      if (dNew <= dOld) return true;
+    }
+  }
+  return false;
+}
+
 function updatePlayer(p, dt) {
   if (p.invuln > 0) p.invuln = Math.max(0, p.invuln - dt / 60);
   if (p.stall > 0) {                       // frozen after a ghost catch
@@ -328,6 +348,7 @@ function updatePlayer(p, dt) {
     return;
   }
   applyStrength(p);
+  const sx = p.x, sy = p.y;                 // frame-start position (for collision revert)
   const step = p.speed * dt;
   const { r: cr, c: cc } = nearestTile(p);
   const { x: cenx, y: ceny } = tileCenter(cr, cc);
@@ -352,6 +373,7 @@ function updatePlayer(p, dt) {
       p.x += p.dir.x * step; p.y += p.dir.y * step;
       if (p.dir.x !== 0) p.y = ceny;
       if (p.dir.y !== 0) p.x = cenx;
+      if (config.collide && hitsAnotherPlayer(p, sx, sy)) { p.x = sx; p.y = sy; }
     }
     p.faceX = p.dir.x; p.faceY = p.dir.y;
   }
@@ -844,6 +866,7 @@ const modeSeg = document.getElementById("mode-seg");
 const modeHint = document.getElementById("mode-hint");
 const reclaimToggle = document.getElementById("reclaim-toggle");
 const strengthToggle = document.getElementById("strength-toggle");
+const collideToggle = document.getElementById("collide-toggle");
 const ghostsToggle = document.getElementById("ghosts-toggle");
 const stallToggle = document.getElementById("stall-toggle");
 
@@ -874,6 +897,10 @@ strengthToggle.addEventListener("click", () => {
   config.strength = !config.strength;
   syncSettingsUI();
 });
+collideToggle.addEventListener("click", () => {
+  config.collide = !config.collide;
+  syncSettingsUI();
+});
 ghostsToggle.addEventListener("click", () => {
   config.ghosts = !config.ghosts;
   syncSettingsUI();
@@ -898,6 +925,9 @@ function syncSettingsUI() {
 
   strengthToggle.classList.toggle("on", config.strength);
   strengthToggle.textContent = config.strength ? "ON" : "OFF";
+
+  collideToggle.classList.toggle("on", config.collide);
+  collideToggle.textContent = config.collide ? "ON" : "OFF";
 
   ghostsToggle.classList.toggle("on", config.ghosts);
   ghostsToggle.textContent = config.ghosts ? "ON" : "OFF";
