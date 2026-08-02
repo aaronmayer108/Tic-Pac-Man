@@ -28,6 +28,15 @@
         </div>
         <div class="score" id="score2">0</div>
       </div>
+
+      <div class="player-card p3-card">
+        <span class="dot-badge p3-badge"></span>
+        <div>
+          <div class="name">Player 3 &nbsp;·&nbsp; <strong>&#9651;</strong></div>
+          <div class="keys">Move with <kbd>I</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></div>
+        </div>
+        <div class="score" id="score3">0</div>
+      </div>
     </div>
 
     <div class="stage">
@@ -36,6 +45,15 @@
       <!-- Waiting room / setup screen -->
       <div id="start-screen" class="overlay">
         <h2>GAME SETUP</h2>
+
+        <div class="opt-group">
+          <div class="opt-label">Players</div>
+          <div class="seg" id="players-seg">
+            <button type="button" data-players="2">2 Players</button>
+            <button type="button" data-players="3" class="active">3 Players</button>
+          </div>
+          <p class="opt-hint">Player 3 is the green &#9651;, moving with <kbd>I</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd>. Still three-in-a-row to win.</p>
+        </div>
 
         <div class="opt-group">
           <div class="opt-label">Game Mode</div>

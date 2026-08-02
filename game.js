@@ -77,26 +77,37 @@ const CAGE_HOME = { r: 14, c: 13 };   // inside the cage
 const TUNNEL_ROW = 14;
 
 /* ------------------------------- Game state ------------------------------ */
-const COLORS = { 1: "#ffe600", 2: "#ff3b30" };
+const COLORS = { 1: "#ffe600", 2: "#ff3b30", 3: "#2bff88" };
 const DOT_NEUTRAL = "#ffb8ae";
 const MAZE_COLOR = "#2121de";
 const FRIGHT_COLOR = "#2233ff";
 const GHOST_COLORS = ["#ff9ff3", "#54e0ff", "#ffb852", "#a98bff"];
 
-const config = { mode: "finish", reclaim: false, ghosts: false };
+// A hex colour (#rrggbb) as an rgba() string with the given alpha.
+function hexToRgba(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+
+// players: 2 (P1 vs P2) or 3 (adds P3, green triangle, IJKL keys).
+const config = { mode: "finish", reclaim: false, ghosts: false, players: 3 };
 
 const dots = [];        // dots[r][c] = dot still present
 const dotOwner = [];    // 0/1/2 (percent mode colour)
 const isBig = [];       // big-pellet tile (only when ghosts on)
 const bigConsumed = []; // big pellet permanently eaten (never respawns)
-const lifetime = { 1: 0, 2: 0 }; // total dots eaten per player -> "strength"
-const dotsRemaining = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
-const dotsTotalPerCell = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
-const paint1 = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
-const paint2 = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+const lifetime = { 1: 0, 2: 0, 3: 0 }; // total dots eaten per player -> "strength"
+const mkGrid = () => [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+const dotsRemaining = mkGrid();
+const dotsTotalPerCell = mkGrid();
+// Percent-mode painted-dot counts per player: paint[id][regionRow][regionCol].
+const paint = { 1: mkGrid(), 2: mkGrid(), 3: mkGrid() };
 
-let board;          // board[row][col] = owner (0/1/2)
+const ALL_IDS = [1, 2, 3];
+
+let board;          // board[row][col] = owner (0/1/2/3)
 let players;
+let activeIds = [1, 2]; // player ids in play this round (set from config.players)
 let ghosts = [];
 let frightTimer = 0; // seconds remaining of frightened mode
 let clock = 0;       // seconds since round start (for ghost release)
@@ -106,8 +117,15 @@ let winner = null;
 let winLine = null;
 
 const SPAWNS = {
-  1: { r: 23, c: 13 },
-  2: { r: 5, c: 14 },
+  1: { r: 23, c: 13, face: 1 },  // bottom-centre, facing right
+  2: { r: 5, c: 14, face: -1 },  // top-centre, facing left
+  3: { r: 14, c: 1, face: 1 },   // left tunnel mouth, facing right
+};
+
+const KEYMAPS = {
+  1: { up: "w", down: "s", left: "a", right: "d" },
+  2: { up: "arrowup", down: "arrowdown", left: "arrowleft", right: "arrowright" },
+  3: { up: "i", down: "k", left: "j", right: "l" },
 };
 
 const canvas = document.getElementById("game");
@@ -148,7 +166,8 @@ function chooseBigPellets() {
 /* ------------------------------ Reset / start ---------------------------- */
 function refillDots() {
   for (let rr = 0; rr < 3; rr++) for (let cc = 0; cc < 3; cc++) {
-    dotsRemaining[rr][cc] = 0; paint1[rr][cc] = 0; paint2[rr][cc] = 0;
+    dotsRemaining[rr][cc] = 0;
+    for (const id of ALL_IDS) paint[id][rr][cc] = 0;
   }
   for (let r = 0; r < ROWS; r++) {
     dots[r] = []; dotOwner[r] = []; bigConsumed[r] = [];
@@ -178,7 +197,7 @@ function respawnCell(row, col) {
 function makePlayer(id, keymap) {
   const s = tileCenter(SPAWNS[id].r, SPAWNS[id].c);
   return { id, x: s.x, y: s.y, r: TILE * 0.42, speed: 2.0, dir: { x: 0, y: 0 },
-    faceX: id === 1 ? 1 : -1, faceY: 0, keymap, color: COLORS[id] };
+    faceX: SPAWNS[id].face, faceY: 0, keymap, color: COLORS[id] };
 }
 
 function makeGhosts() {
@@ -200,17 +219,16 @@ function makeGhosts() {
 
 function resetGame() {
   refillDots();
-  board = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
-  players = [
-    makePlayer(1, { up: "w", down: "s", left: "a", right: "d" }),
-    makePlayer(2, { up: "arrowup", down: "arrowdown", left: "arrowleft", right: "arrowright" }),
-  ];
+  board = mkGrid();
+  activeIds = config.players === 3 ? [1, 2, 3] : [1, 2];
+  players = activeIds.map((id) => makePlayer(id, KEYMAPS[id]));
   ghosts = config.ghosts ? makeGhosts() : [];
   frightTimer = 0;
   clock = 0;
-  lifetime[1] = 0; lifetime[2] = 0;
+  for (const id of ALL_IDS) lifetime[id] = 0;
   gameOver = false; winner = null; winLine = null;
   held.clear(); pressOrder.length = 0;
+  syncPlayerCards();
   updateHud();
 }
 
@@ -272,8 +290,9 @@ function wrapTunnel(o) {
 // The more dots you've eaten relative to your opponent, the faster & bigger
 // you are -- so aggressively eating beats passively trailing to steal squares.
 function applyStrength(p) {
-  const opp = p.id === 1 ? 2 : 1;
-  const diff = lifetime[p.id] - lifetime[opp];
+  let sum = 0, n = 0;
+  for (const q of players) if (q.id !== p.id) { sum += lifetime[q.id]; n++; }
+  const diff = lifetime[p.id] - (n ? sum / n : 0); // vs. average rival
   const boost = Math.max(-0.2, Math.min(0.32, diff / 350));
   p.speed = 2.0 * (1 + boost);
   p.r = TILE * 0.42 * (1 + boost * 0.35);
@@ -339,9 +358,9 @@ function paintDot(p, cr, cc) {
   const old = dotOwner[cr][cc];
   if (old === p.id) return;
   const rr = regionRow(cr), cc2 = regionCol(cc);
-  if (old === 1) paint1[rr][cc2]--; else if (old === 2) paint2[rr][cc2]--;
+  if (old) paint[old][rr][cc2]--;
   dotOwner[cr][cc] = p.id;
-  if (p.id === 1) paint1[rr][cc2]++; else paint2[rr][cc2]++;
+  paint[p.id][rr][cc2]++;
   lifetime[p.id]++;
   reevaluatePercent(rr, cc2);
 }
@@ -350,7 +369,7 @@ function reevaluatePercent(rr, cc) {
   const T = dotsTotalPerCell[rr][cc] || 1;
   const need = Math.ceil(T * 0.75);
   let owner = 0;
-  if (paint1[rr][cc] >= need) owner = 1; else if (paint2[rr][cc] >= need) owner = 2;
+  for (const id of activeIds) if (paint[id][rr][cc] >= need) { owner = id; break; }
   setOwner(rr, cc, owner);
 }
 
@@ -365,7 +384,7 @@ function consumeBig(p, cr, cc) {
   dotsTotalPerCell[rr][cc2] = Math.max(0, dotsTotalPerCell[rr][cc2] - 1);
   if (config.mode === "percent") {
     const old = dotOwner[cr][cc];
-    if (old === 1) paint1[rr][cc2]--; else if (old === 2) paint2[rr][cc2]--;
+    if (old) paint[old][rr][cc2]--;
     dotOwner[cr][cc] = 0;
     reevaluatePercent(rr, cc2);
   } else if (--dotsRemaining[rr][cc2] <= 0) {
@@ -608,13 +627,20 @@ function drawClaimMarks() {
     ctx.lineCap = "round";
     ctx.shadowColor = COLORS[owner];
     ctx.shadowBlur = 16;
-    if (owner === 1) {
+    if (owner === 1) {           // X
       ctx.beginPath();
       ctx.moveTo(cen.x - s, cen.y - s); ctx.lineTo(cen.x + s, cen.y + s);
       ctx.moveTo(cen.x + s, cen.y - s); ctx.lineTo(cen.x - s, cen.y + s);
       ctx.stroke();
-    } else {
+    } else if (owner === 2) {    // O
       ctx.beginPath(); ctx.arc(cen.x, cen.y, s, 0, Math.PI * 2); ctx.stroke();
+    } else {                     // triangle (P3)
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      ctx.moveTo(cen.x, cen.y - s);
+      ctx.lineTo(cen.x + s * 0.92, cen.y + s * 0.7);
+      ctx.lineTo(cen.x - s * 0.92, cen.y + s * 0.7);
+      ctx.closePath(); ctx.stroke();
     }
     ctx.restore();
   }
@@ -707,10 +733,14 @@ function drawRegionProgress() {
     let label, color = "rgba(255,255,255,0.30)";
     if (config.mode === "percent") {
       const T = dotsTotalPerCell[rr][cc] || 1;
-      const a = paint1[rr][cc], b = paint2[rr][cc];
-      label = Math.round((100 * Math.max(a, b)) / T) + "%";
-      if (a > b) color = "rgba(255,230,0,0.5)";
-      else if (b > a) color = "rgba(255,59,48,0.55)";
+      let lead = 0, leadId = 0, tie = false;
+      for (const id of activeIds) {
+        const v = paint[id][rr][cc];
+        if (v > lead) { lead = v; leadId = id; tie = false; }
+        else if (v === lead && v > 0) tie = true;
+      }
+      label = Math.round((100 * lead) / T) + "%";
+      if (leadId && !tie) color = hexToRgba(COLORS[leadId], 0.55);
     } else {
       label = dotsRemaining[rr][cc] + "";
     }
@@ -760,14 +790,23 @@ function roundRect(x, y, w, h, r) {
 
 /* --------------------------------- HUD ----------------------------------- */
 function updateHud() {
-  let s1 = 0, s2 = 0;
-  for (const row of board) for (const v of row) { if (v === 1) s1++; else if (v === 2) s2++; }
-  document.getElementById("score1").textContent = s1;
-  document.getElementById("score2").textContent = s2;
+  const s = { 1: 0, 2: 0, 3: 0 };
+  for (const row of board) for (const v of row) if (v) s[v]++;
+  for (const id of ALL_IDS) {
+    const el = document.getElementById("score" + id);
+    if (el) el.textContent = s[id];
+  }
+}
+
+// Show the P3 HUD card only in 3-player mode.
+function syncPlayerCards() {
+  const c3 = document.querySelector(".p3-card");
+  if (c3) c3.style.display = config.players === 3 ? "" : "none";
 }
 
 /* ------------------------- Setup screen wiring --------------------------- */
 const startScreen = document.getElementById("start-screen");
+const playersSeg = document.getElementById("players-seg");
 const modeSeg = document.getElementById("mode-seg");
 const modeHint = document.getElementById("mode-hint");
 const reclaimToggle = document.getElementById("reclaim-toggle");
@@ -778,6 +817,13 @@ const MODE_HINTS = {
   percent: "Paint dots by passing over them — own 75% of a square to claim it. Recolour to steal it back.",
 };
 
+playersSeg.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-players]");
+  if (!btn) return;
+  config.players = +btn.dataset.players;
+  if (!started) resetGame(); // rebuild the on-canvas roster for the preview
+  syncSettingsUI();
+});
 modeSeg.addEventListener("click", (e) => {
   const btn = e.target.closest("button[data-mode]");
   if (!btn) return;
@@ -796,6 +842,8 @@ ghostsToggle.addEventListener("click", () => {
 document.getElementById("start-btn").addEventListener("click", startGame);
 
 function syncSettingsUI() {
+  [...playersSeg.children].forEach((b) => b.classList.toggle("active", +b.dataset.players === config.players));
+  syncPlayerCards();
   [...modeSeg.children].forEach((b) => b.classList.toggle("active", b.dataset.mode === config.mode));
   modeHint.textContent = MODE_HINTS[config.mode];
 
@@ -879,15 +927,20 @@ function musicProgress() {
   for (let rr = 0; rr < 3; rr++) for (let cc = 0; cc < 3; cc++) {
     const T = dotsTotalPerCell[rr][cc];
     total += T;
-    done += config.mode === "percent" ? (paint1[rr][cc] + paint2[rr][cc]) : (T - dotsRemaining[rr][cc]);
+    if (config.mode === "percent") {
+      for (const id of activeIds) done += paint[id][rr][cc];
+    } else {
+      done += T - dotsRemaining[rr][cc];
+    }
   }
   return total ? done / total : 0;
 }
 function computeNearWin() {
   for (const line of LINES) {
-    let o1 = 0, o2 = 0, e = 0;
-    for (const [r, c] of line) { const v = board[r][c]; if (v === 0) e++; else if (v === 1) o1++; else o2++; }
-    if (e === 1 && (o1 === 2 || o2 === 2)) return true;
+    const counts = {};
+    let e = 0;
+    for (const [r, c] of line) { const v = board[r][c]; if (v === 0) e++; else counts[v] = (counts[v] || 0) + 1; }
+    if (e === 1 && Object.values(counts).some((n) => n === 2)) return true;
   }
   return false;
 }

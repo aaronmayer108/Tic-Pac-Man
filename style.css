@@ -1,6 +1,7 @@
 :root {
   --p1: #ffe600;
   --p2: #ff3b30;
+  --p3: #2bff88;
   --maze: #2121de;
   --bg: #000;
 }
@@ -56,6 +57,7 @@ h1 .p2 { color: var(--p2); }
 }
 .p1-card { border-color: rgba(255, 230, 0, 0.5); }
 .p2-card { border-color: rgba(255, 59, 48, 0.5); }
+.p3-card { border-color: rgba(43, 255, 136, 0.5); }
 
 .dot-badge {
   width: 22px;
@@ -65,6 +67,7 @@ h1 .p2 { color: var(--p2); }
 }
 .p1-badge { background: var(--p1); box-shadow: 0 0 12px var(--p1); }
 .p2-badge { background: var(--p2); box-shadow: 0 0 12px var(--p2); }
+.p3-badge { background: var(--p3); box-shadow: 0 0 12px var(--p3); }
 
 .player-card .name { font-size: 11px; margin-bottom: 6px; }
 .player-card .keys { font-size: 9px; color: #aab; }
@@ -87,6 +90,7 @@ kbd {
 }
 .p1-card .score { color: var(--p1); }
 .p2-card .score { color: var(--p2); }
+.p3-card .score { color: var(--p3); }
 
 /* ------------------------------- Stage ---------------------------------- */
 .stage {
