@@ -90,7 +90,9 @@ function hexToRgba(hex, a) {
 }
 
 // players: 2 (P1 vs P2) or 3 (adds P3, green triangle, IJKL keys).
-const config = { mode: "finish", reclaim: false, ghosts: false, players: 3 };
+// strength: eat-more-dots -> faster & bigger (optional).
+// stall: caught by a ghost freezes you for 2s instead of respawning.
+const config = { mode: "finish", reclaim: false, ghosts: false, players: 3, strength: true, stall: false };
 
 const dots = [];        // dots[r][c] = dot still present
 const dotOwner = [];    // 0/1/2 (percent mode colour)
@@ -116,17 +118,32 @@ let gameOver = false;
 let winner = null;
 let winLine = null;
 
-const SPAWNS = {
-  1: { r: 23, c: 13, face: 1 },  // bottom-centre, facing right
-  2: { r: 5, c: 14, face: -1 },  // top-centre, facing left
-  3: { r: 14, c: 1, face: 1 },   // left tunnel mouth, facing right
-};
-
 const KEYMAPS = {
   1: { up: "w", down: "s", left: "a", right: "d" },
   2: { up: "arrowup", down: "arrowdown", left: "arrowleft", right: "arrowright" },
   3: { up: "i", down: "k", left: "j", right: "l" },
 };
+
+// Random start positions: pick n distinct dot tiles (always walkable corridor,
+// never a wall or the ghost cage), spread apart so no one starts on top of a
+// rival. Falls back to any distinct tiles if the spacing can't be satisfied.
+function randomSpawns(n) {
+  const cands = [];
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (isDotCell(r, c)) cands.push({ r, c });
+  const pick = () => cands[(Math.random() * cands.length) | 0];
+  const chosen = [];
+  const MIN_D = 6; // min tile separation between spawns
+  for (let tries = 0; chosen.length < n && tries < 4000; tries++) {
+    const t = pick();
+    if (chosen.some((o) => Math.hypot(o.r - t.r, o.c - t.c) < MIN_D)) continue;
+    chosen.push(t);
+  }
+  while (chosen.length < n) {
+    const t = pick();
+    if (!chosen.some((o) => o.r === t.r && o.c === t.c)) chosen.push(t);
+  }
+  return chosen.map((t) => ({ r: t.r, c: t.c, face: t.c < COLS / 2 ? 1 : -1 }));
+}
 
 const canvas = document.getElementById("game");
 canvas.width = COLS * TILE;
@@ -194,10 +211,12 @@ function respawnCell(row, col) {
   dotsRemaining[row][col] = cnt;
 }
 
-function makePlayer(id, keymap) {
-  const s = tileCenter(SPAWNS[id].r, SPAWNS[id].c);
+function makePlayer(id, keymap, spawn) {
+  const s = tileCenter(spawn.r, spawn.c);
   return { id, x: s.x, y: s.y, r: TILE * 0.42, speed: 2.0, dir: { x: 0, y: 0 },
-    faceX: SPAWNS[id].face, faceY: 0, keymap, color: COLORS[id] };
+    faceX: spawn.face, faceY: 0, keymap, color: COLORS[id],
+    spawnR: spawn.r, spawnC: spawn.c, // where a ghost sends you back to
+    stall: 0, invuln: 0 };            // ghost-stall freeze + brief post-freeze immunity
 }
 
 function makeGhosts() {
@@ -221,7 +240,8 @@ function resetGame() {
   refillDots();
   board = mkGrid();
   activeIds = config.players === 3 ? [1, 2, 3] : [1, 2];
-  players = activeIds.map((id) => makePlayer(id, KEYMAPS[id]));
+  const spawns = randomSpawns(activeIds.length);
+  players = activeIds.map((id, i) => makePlayer(id, KEYMAPS[id], spawns[i]));
   ghosts = config.ghosts ? makeGhosts() : [];
   frightTimer = 0;
   clock = 0;
@@ -290,6 +310,7 @@ function wrapTunnel(o) {
 // The more dots you've eaten relative to your opponent, the faster & bigger
 // you are -- so aggressively eating beats passively trailing to steal squares.
 function applyStrength(p) {
+  if (!config.strength) { p.speed = 2.0; p.r = TILE * 0.42; return; } // equal, constant speed
   let sum = 0, n = 0;
   for (const q of players) if (q.id !== p.id) { sum += lifetime[q.id]; n++; }
   const diff = lifetime[p.id] - (n ? sum / n : 0); // vs. average rival
@@ -299,6 +320,13 @@ function applyStrength(p) {
 }
 
 function updatePlayer(p, dt) {
+  if (p.invuln > 0) p.invuln = Math.max(0, p.invuln - dt / 60);
+  if (p.stall > 0) {                       // frozen after a ghost catch
+    p.stall = Math.max(0, p.stall - dt / 60);
+    if (p.stall === 0) p.invuln = 0.8;     // brief grace so you aren't re-caught instantly
+    p.dir = { x: 0, y: 0 };
+    return;
+  }
   applyStrength(p);
   const step = p.speed * dt;
   const { r: cr, c: cc } = nearestTile(p);
@@ -518,11 +546,14 @@ function handleGhostCollisions() {
   for (const g of ghosts) {
     if (g.mode === "caged" || g.mode === "leaving" || g.mode === "eaten") continue;
     for (const p of players) {
+      if (p.stall > 0 || p.invuln > 0) continue; // immune while frozen / just after
       if (Math.hypot(p.x - g.x, p.y - g.y) > p.r + g.r - 4) continue;
       if (frightTimer > 0) {
         g.mode = "eaten"; g.dir = { x: 0, y: -1 };
+      } else if (config.stall) {
+        p.stall = 2; p.dir = { x: 0, y: 0 }; // freeze in place for 2s
       } else {
-        const s = tileCenter(SPAWNS[p.id].r, SPAWNS[p.id].c);
+        const s = tileCenter(p.spawnR, p.spawnC); // back to your start tile
         p.x = s.x; p.y = s.y; p.dir = { x: 0, y: 0 };
       }
     }
@@ -667,6 +698,8 @@ function drawPacman(p, time) {
   const open = moving ? (0.18 + 0.22 * Math.abs(Math.sin(time / 90))) : 0.06;
   const angle = Math.atan2(p.faceY, p.faceX);
   ctx.save();
+  // Frozen by a ghost: blink to show the 2s stall.
+  if (p.stall > 0) ctx.globalAlpha = 0.35 + 0.35 * Math.abs(Math.sin(time / 90));
   ctx.translate(p.x, p.y);
   ctx.rotate(angle);
   ctx.fillStyle = p.color;
@@ -810,7 +843,9 @@ const playersSeg = document.getElementById("players-seg");
 const modeSeg = document.getElementById("mode-seg");
 const modeHint = document.getElementById("mode-hint");
 const reclaimToggle = document.getElementById("reclaim-toggle");
+const strengthToggle = document.getElementById("strength-toggle");
 const ghostsToggle = document.getElementById("ghosts-toggle");
+const stallToggle = document.getElementById("stall-toggle");
 
 const MODE_HINTS = {
   finish: "Eat every dot in a square to claim it.",
@@ -835,8 +870,17 @@ reclaimToggle.addEventListener("click", () => {
   config.reclaim = !config.reclaim;
   syncSettingsUI();
 });
+strengthToggle.addEventListener("click", () => {
+  config.strength = !config.strength;
+  syncSettingsUI();
+});
 ghostsToggle.addEventListener("click", () => {
   config.ghosts = !config.ghosts;
+  syncSettingsUI();
+});
+stallToggle.addEventListener("click", () => {
+  if (stallToggle.disabled) return;
+  config.stall = !config.stall;
   syncSettingsUI();
 });
 document.getElementById("start-btn").addEventListener("click", startGame);
@@ -852,8 +896,17 @@ function syncSettingsUI() {
   if (percent) { reclaimToggle.classList.add("on"); reclaimToggle.textContent = "ALWAYS ON"; }
   else { reclaimToggle.classList.toggle("on", config.reclaim); reclaimToggle.textContent = config.reclaim ? "ON" : "OFF"; }
 
+  strengthToggle.classList.toggle("on", config.strength);
+  strengthToggle.textContent = config.strength ? "ON" : "OFF";
+
   ghostsToggle.classList.toggle("on", config.ghosts);
   ghostsToggle.textContent = config.ghosts ? "ON" : "OFF";
+
+  // Ghost Stall only does anything when ghosts are enabled.
+  stallToggle.disabled = !config.ghosts;
+  stallToggle.parentElement.classList.toggle("dim", !config.ghosts);
+  stallToggle.classList.toggle("on", config.stall && config.ghosts);
+  stallToggle.textContent = config.stall ? "ON" : "OFF";
 }
 
 /* --------------------------------- Audio --------------------------------- */
