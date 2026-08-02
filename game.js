@@ -93,7 +93,7 @@ function hexToRgba(hex, a) {
 // strength: eat-more-dots -> faster & bigger (optional).
 // stall: caught by a ghost freezes you for 2s instead of respawning.
 // collide: players block each other instead of passing through.
-const config = { mode: "finish", reclaim: false, ghosts: false, players: 3, strength: true, stall: false, collide: false };
+const config = { mode: "finish", reclaim: false, ghosts: false, players: 2, strength: true, stall: false, collide: false };
 
 // Centre-to-centre gap players stop at when collision is on (< 1 tile so
 // it never falsely blocks parallel corridors separated by a wall).
